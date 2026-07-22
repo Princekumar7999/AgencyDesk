@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: agencydesk-postgres
+    environment:
+      POSTGRES_DB: agencydesk
+      POSTGRES_USER: agencydesk
+      POSTGRES_PASSWORD: agencydesk
+    ports:
+      - "5432:5432"
+    volumes:
+      - agencydesk_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  agencydesk_postgres_data:
