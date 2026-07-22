@@ -87,6 +87,23 @@ interface AgencyMemberRecord {
   client_id: string | null;
 }
 
+interface IntakeForm {
+  id: string;
+  title: string;
+  fields_schema: Record<string, unknown>;
+  share_token: string;
+  is_active: boolean;
+}
+
+interface NotificationItem {
+  id: string;
+  event_type: string;
+  title: string;
+  message: string;
+  is_read: boolean;
+  created_at: string;
+}
+
 export default function DashboardPage() {
   const { user, activeMembership, isAuthenticated, loading, logout, switchAgency, apiFetch } = useAuth();
   const router = useRouter();
@@ -99,6 +116,8 @@ export default function DashboardPage() {
   const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
   const [agencyMembers, setAgencyMembers] = useState<AgencyMemberRecord[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [intakeForms, setIntakeForms] = useState<IntakeForm[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   
   // Tab control
   const [activeTab, setActiveTab] = useState<'board' | 'team' | 'invites'>('board');
@@ -113,11 +132,16 @@ export default function DashboardPage() {
   const [showAddProject, setShowAddProject] = useState(false);
   const [showAddTask, setShowAddTask] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [showClientManager, setShowClientManager] = useState(false);
+  const [showIntakeFormCreator, setShowIntakeFormCreator] = useState(false);
   
   // Form values
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDesc, setNewProjectDesc] = useState('');
   const [newProjectClientId, setNewProjectClientId] = useState('');
+  const [newClientName, setNewClientName] = useState('');
+  const [newIntakeTitle, setNewIntakeTitle] = useState('Project Intake');
+  const [newIntakeFieldsJson, setNewIntakeFieldsJson] = useState('{\n  "budget": "text",\n  "timeline": "text",\n  "goals": "textarea"\n}');
   
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [newTaskDesc, setNewTaskDesc] = useState('');
@@ -157,7 +181,9 @@ export default function DashboardPage() {
       if (activeMembership.role !== 'client_user') {
         fetchAgencyMembers();
         fetchClients();
+        fetchIntakeForms();
       }
+      fetchNotifications();
       // Clear selections
       setSelectedProject(null);
       setTasks([]);
@@ -259,6 +285,28 @@ export default function DashboardPage() {
     }
   };
 
+  const fetchIntakeForms = async () => {
+    try {
+      const res = await apiFetch('/intake-forms');
+      if (res.ok) {
+        setIntakeForms(await res.json());
+      }
+    } catch (err) {
+      console.error('Failed to load intake forms:', err);
+    }
+  };
+
+  const fetchNotifications = async () => {
+    try {
+      const res = await apiFetch('/notifications');
+      if (res.ok) {
+        setNotifications(await res.json());
+      }
+    } catch (err) {
+      console.error('Failed to load notifications:', err);
+    }
+  };
+
   const fetchTaskDetails = async (taskId: string) => {
     try {
       // 1. Fetch Comments
@@ -319,6 +367,64 @@ export default function DashboardPage() {
       }
     } catch (err) {
       console.error(err);
+    }
+  };
+
+  const openCreateProject = () => {
+    setShowAddProject(true);
+    if (activeMembership?.role === 'agency_admin' && clients.length === 0) {
+      setShowClientManager(true);
+    }
+  };
+
+  const handleCreateClient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newClientName.trim()) return;
+
+    try {
+      const res = await apiFetch('/agencies/clients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newClientName })
+      });
+
+      if (res.ok) {
+        setNewClientName('');
+        setShowClientManager(false);
+        await fetchClients();
+      } else {
+        const err = await res.json();
+        alert(`Error: ${err.detail || 'Could not create client company.'}`);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleCreateIntakeForm = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    try {
+      const parsedFields = JSON.parse(newIntakeFieldsJson);
+      const res = await apiFetch('/intake-forms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: newIntakeTitle,
+          fields_schema: parsedFields,
+          is_active: true
+        })
+      });
+
+      if (res.ok) {
+        setShowIntakeFormCreator(false);
+        await fetchIntakeForms();
+      } else {
+        const err = await res.json();
+        alert(`Error: ${err.detail || 'Could not create intake form.'}`);
+      }
+    } catch (err) {
+      alert('Intake form schema must be valid JSON.');
     }
   };
 
@@ -708,6 +814,212 @@ export default function DashboardPage() {
 
         {/* WORKSPACE AREA */}
         <main className="flex-1 overflow-y-auto p-6 flex flex-col gap-6">
+          {activeMembership?.role === 'client_user' && (
+            <div className="glass-panel p-6 border-emerald-500/20 bg-emerald-950/10">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold">Client Portal</div>
+                  <h2 className="text-2xl font-black text-white mt-1">
+                    Welcome, {activeMembership.client_name || 'Client'}
+                  </h2>
+                  <p className="text-sm text-gray-400 mt-1">
+                    Your workspace is filtered to the projects, tasks, comments, and files shared with your company.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+                  {projects.length} project{projects.length === 1 ? '' : 's'} available
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeMembership?.role === 'agency_admin' && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="glass-panel p-5 lg:col-span-2">
+                <div className="flex items-center justify-between gap-4 mb-4">
+                  <div>
+                    <h3 className="text-base font-bold text-white">Client Companies</h3>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Create the client company here first, then assign it to projects and invitations.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowClientManager((current) => !current)}
+                    className="btn-secondary text-xs py-1.5 px-3"
+                  >
+                    {showClientManager ? 'Hide Form' : 'New Client'}
+                  </button>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  {clients.length === 0 ? (
+                    <div className="text-sm text-gray-500 italic">No client companies yet.</div>
+                  ) : (
+                    clients.map((client) => (
+                      <div key={client.id} className="flex items-center justify-between rounded-lg border border-white/5 bg-slate-950/40 px-3 py-2">
+                        <div>
+                          <div className="text-sm font-semibold text-white">{client.name}</div>
+                          <div className="text-[10px] text-gray-500">Client company for this workspace</div>
+                        </div>
+                        <span className="text-[10px] uppercase tracking-wider text-emerald-400 font-bold">Ready</span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="glass-panel p-5">
+                {showClientManager ? (
+                  <form onSubmit={handleCreateClient} className="space-y-4">
+                    <div>
+                      <h3 className="text-base font-bold text-white">Create Client Company</h3>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Add the client company before creating projects or client invites.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                        Client Company Name
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="Alpha Corp"
+                        value={newClientName}
+                        onChange={(e) => setNewClientName(e.target.value)}
+                        className="input-field py-2 text-sm"
+                      />
+                    </div>
+
+                    <div className="flex gap-3">
+                      <button type="button" onClick={() => setShowClientManager(false)} className="btn-secondary text-sm flex-1">
+                        Cancel
+                      </button>
+                      <button type="submit" className="btn-primary text-sm flex-1 justify-center">
+                        Save Client
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="flex h-full min-h-[180px] flex-col justify-between">
+                    <div>
+                      <h3 className="text-base font-bold text-white">Need a new client?</h3>
+                      <p className="text-sm text-gray-400 mt-2">
+                        Create the company record first so it appears in project assignment and client invite flows.
+                      </p>
+                    </div>
+                    <button onClick={() => setShowClientManager(true)} className="btn-primary text-sm justify-center mt-6">
+                      Create Client Company
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {activeMembership?.role === 'agency_admin' && (
+              <div className="glass-panel p-5">
+                <div className="flex items-center justify-between gap-4 mb-4">
+                  <div>
+                    <h3 className="text-base font-bold text-white">Client Intake Forms</h3>
+                    <p className="text-xs text-gray-400 mt-1">Create public forms that automatically create a client and project.</p>
+                  </div>
+                  <button
+                    onClick={() => setShowIntakeFormCreator((current) => !current)}
+                    className="btn-secondary text-xs py-1.5 px-3"
+                  >
+                    {showIntakeFormCreator ? 'Hide Form' : 'New Form'}
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {intakeForms.length === 0 ? (
+                    <div className="text-sm text-gray-500 italic">No intake forms created yet.</div>
+                  ) : (
+                    intakeForms.map((form) => (
+                      <div key={form.id} className="rounded-lg border border-white/5 bg-slate-950/40 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <div className="text-sm font-semibold text-white">{form.title}</div>
+                            <div className="text-[10px] text-gray-500 break-all">/intake-forms/public/{form.share_token}</div>
+                          </div>
+                          <span className={`text-[10px] uppercase tracking-wider font-bold ${form.is_active ? 'text-emerald-400' : 'text-gray-500'}`}>
+                            {form.is_active ? 'Active' : 'Paused'}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {showIntakeFormCreator && (
+                  <form onSubmit={handleCreateIntakeForm} className="space-y-3 mt-4 border-t border-white/5 pt-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Form Title</label>
+                      <input
+                        type="text"
+                        value={newIntakeTitle}
+                        onChange={(e) => setNewIntakeTitle(e.target.value)}
+                        className="input-field py-2 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Fields Schema JSON</label>
+                      <textarea
+                        value={newIntakeFieldsJson}
+                        onChange={(e) => setNewIntakeFieldsJson(e.target.value)}
+                        className="input-field h-32 text-xs font-mono"
+                      />
+                    </div>
+                    <button type="submit" className="btn-primary text-sm w-full justify-center">Save Form</button>
+                  </form>
+                )}
+              </div>
+            )}
+
+            <div className="glass-panel p-5 lg:col-span-2">
+              <div className="flex items-center justify-between gap-4 mb-4">
+                <div>
+                  <h3 className="text-base font-bold text-white">Notifications</h3>
+                  <p className="text-xs text-gray-400 mt-1">Automations from tasks, comments, files, and intake submissions land here.</p>
+                </div>
+                <span className="text-[10px] uppercase tracking-wider text-violet-400 font-bold">
+                  {notifications.filter((notification) => !notification.is_read).length} unread
+                </span>
+              </div>
+
+              <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                {notifications.length === 0 ? (
+                  <div className="text-sm text-gray-500 italic">No notifications yet.</div>
+                ) : (
+                  notifications.map((notification) => (
+                    <div key={notification.id} className={`rounded-lg border p-3 ${notification.is_read ? 'border-white/5 bg-slate-950/35' : 'border-violet-500/20 bg-violet-950/15'}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-sm font-semibold text-white">{notification.title}</div>
+                          <div className="text-xs text-gray-400 mt-1">{notification.message}</div>
+                        </div>
+                        {!notification.is_read && (
+                          <button
+                            onClick={async () => {
+                              await apiFetch(`/notifications/${notification.id}/read`, { method: 'POST' });
+                              await fetchNotifications();
+                            }}
+                            className="text-[10px] uppercase tracking-wider text-violet-300 hover:text-violet-200 font-bold"
+                          >
+                            Mark read
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+
           {projects.length === 0 ? (
             <div className="flex flex-col items-center justify-center flex-1 text-center glass-panel p-12">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 text-gray-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -718,7 +1030,7 @@ export default function DashboardPage() {
                 There are no active projects registered under this agency context.
               </p>
               {activeMembership?.role === 'agency_admin' && (
-                <button onClick={() => setShowAddProject(true)} className="btn-primary">
+                <button onClick={openCreateProject} className="btn-primary">
                   Create Project
                 </button>
               )}
@@ -731,6 +1043,7 @@ export default function DashboardPage() {
               <div className="flex flex-col gap-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
+
                     <h2 className="text-2xl font-black text-white">{selectedProject.name}</h2>
                     <p className="text-xs text-gray-400 mt-1">
                       {selectedProject.description || 'No description supplied.'}
@@ -1102,19 +1415,40 @@ export default function DashboardPage() {
 
               <div>
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Assign to Client Company</label>
-                <select
-                  value={newProjectClientId}
-                  onChange={(e) => setNewProjectClientId(e.target.value)}
-                  required
-                  className="bg-slate-900 border border-white/10 rounded-lg w-full p-3 text-sm text-white focus:border-violet-500 outline-none"
-                >
-                  <option value="">-- Choose Client --</option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                {clients.length === 0 ? (
+                  <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4">
+                    <p className="text-sm text-amber-200 font-medium">
+                      No client company exists yet for this agency.
+                    </p>
+                    <p className="text-xs text-amber-100/70 mt-1">
+                      Create a client company first, then return here to assign it to the project.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowAddProject(false);
+                        setShowClientManager(true);
+                      }}
+                      className="btn-primary text-xs mt-3"
+                    >
+                      Create Client Company
+                    </button>
+                  </div>
+                ) : (
+                  <select
+                    value={newProjectClientId}
+                    onChange={(e) => setNewProjectClientId(e.target.value)}
+                    required
+                    className="bg-slate-900 border border-white/10 rounded-lg w-full p-3 text-sm text-white focus:border-violet-500 outline-none"
+                  >
+                    <option value="">-- Choose Client --</option>
+                    {clients.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div className="flex justify-end gap-3 mt-6">

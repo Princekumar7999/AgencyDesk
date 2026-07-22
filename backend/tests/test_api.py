@@ -322,3 +322,84 @@ def test_automated_audit_trail():
     assert comment_data["updated_by"] == "user_admin_a"
     assert comment_data["created_at"] is not None
     assert comment_data["updated_at"] is not None
+
+# ----------------------------------------------------
+# 7. TEST CLIENT COMPANY CREATION FOR NEW AGENCY
+# ----------------------------------------------------
+def test_create_client_company_for_new_agency():
+    admin_headers = get_auth_headers("admin.a@example.com")
+
+    agency_response = client.post(
+        "/api/agencies",
+        json={"name": "New Alpha Agency"},
+        headers=admin_headers,
+    )
+    assert agency_response.status_code == 201
+    agency_id = agency_response.json()["id"]
+
+    agency_workspace_headers = get_auth_headers("admin.a@example.com")
+    agency_workspace_headers["X-Agency-ID"] = agency_id
+
+    client_response = client.post(
+        "/api/agencies/clients",
+        json={"name": "New Alpha Client"},
+        headers=agency_workspace_headers,
+    )
+    assert client_response.status_code == 201
+    client_id = client_response.json()["id"]
+    assert client_response.json()["agency_id"] == agency_id
+
+    project_response = client.post(
+        "/api/projects",
+        json={"name": "New Alpha Project", "description": "Created for the new client.", "client_id": client_id},
+        headers=agency_workspace_headers,
+    )
+    assert project_response.status_code == 201
+    assert project_response.json()["client_id"] == client_id
+
+
+# ----------------------------------------------------
+# 8. TEST CLIENT INTAKE FORM + NOTIFICATIONS
+# ----------------------------------------------------
+def test_intake_form_creates_client_project_and_notification():
+    admin_headers = get_auth_headers("admin.a@example.com")
+    admin_headers["X-Agency-ID"] = "agency_a"
+
+    form_response = client.post(
+        "/api/intake-forms",
+        json={
+            "title": "Website Intake",
+            "fields_schema": {"budget": "text", "timeline": "text"},
+            "is_active": True,
+        },
+        headers=admin_headers,
+    )
+    assert form_response.status_code == 201
+    share_token = form_response.json()["share_token"]
+
+    submission_response = client.post(
+        f"/api/intake-forms/public/{share_token}",
+        json={
+            "client_name": "Gamma Co",
+            "project_name": "Gamma Launch",
+            "project_description": "Public intake submission",
+            "answers": {"budget": "10k", "timeline": "6 weeks"},
+        },
+    )
+    assert submission_response.status_code == 201
+    submission = submission_response.json()
+    assert submission["client_name"] == "Gamma Co"
+
+    db = TestingSessionLocal()
+    created_client = db.query(models.Client).filter(models.Client.name == "Gamma Co").first()
+    created_project = db.query(models.Project).filter(models.Project.name == "Gamma Launch").first()
+    assert created_client is not None
+    assert created_project is not None
+
+    admin_notifications = db.query(models.Notification).filter(
+        models.Notification.agency_id == "agency_a",
+        models.Notification.user_id == "user_admin_a",
+        models.Notification.event_type == "intake_submission_created",
+    ).all()
+    assert len(admin_notifications) >= 1
+    db.close()

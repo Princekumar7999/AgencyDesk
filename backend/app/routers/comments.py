@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from .. import models, schemas, auth
+from ..services.event_bus import emit_notification
 
 router = APIRouter(prefix="/comments", tags=["Comments"])
 
@@ -82,6 +83,18 @@ def create_comment(
     db.add(comment)
     db.commit()
     db.refresh(comment)
+    emit_notification(
+        db,
+        agency_id=membership.agency_id,
+        event_type="comment_created",
+        title="New comment",
+        message=f"A comment was added to {task.title}.",
+        entity_type="comment",
+        entity_id=comment.id,
+        client_visible=comment.is_client_visible,
+        actor_user_id=membership.user_id,
+    )
+    db.commit()
     
     # Reload with author relation
     return db.query(models.Comment).filter(models.Comment.id == comment.id).first()

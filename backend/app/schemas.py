@@ -280,3 +280,70 @@ class ProjectDashboardMetrics(BaseModel):
     in_review_tasks: int
     completed_tasks: int
     total_hours_logged: float
+
+# ----------------------------------------------------
+# NOTIFICATION SCHEMAS
+# ----------------------------------------------------
+class NotificationOut(BaseModel):
+    id: str
+    agency_id: str
+    user_id: str
+    event_type: str
+    title: str
+    message: str
+    entity_type: Optional[str] = None
+    entity_id: Optional[str] = None
+    is_read: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# ----------------------------------------------------
+# CLIENT INTAKE FORM SCHEMAS
+# ----------------------------------------------------
+class ClientIntakeFormCreate(BaseModel):
+    title: str
+    fields_schema: dict = Field(default_factory=dict)
+    is_active: bool = True
+
+
+class ClientIntakeFormOut(BaseModel):
+    id: str
+    agency_id: str
+    title: str
+    fields_schema: dict
+    share_token: str
+    is_active: bool
+    created_by: Optional[str] = None
+    updated_by: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ClientIntakeSubmissionCreate(BaseModel):
+    client_name: str
+    project_name: str
+    project_description: Optional[str] = None
+    answers: dict = Field(default_factory=dict)
+
+
+class ClientIntakeSubmissionOut(BaseModel):
+    id: str
+    agency_id: str
+    form_id: str
+    client_id: str
+    project_id: str
+    client_name: str
+    project_name: str
+    answers_json: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

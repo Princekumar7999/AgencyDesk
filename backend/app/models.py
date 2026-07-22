@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Boolean, Integer, DateTime, ForeignKey, Date, UniqueConstraint, Index, text
+from sqlalchemy import Column, String, Boolean, Integer, DateTime, ForeignKey, Date, Text, UniqueConstraint, Index, text
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -39,6 +39,8 @@ class Agency(Base):
     clients = relationship("Client", back_populates="agency", cascade="all, delete-orphan")
     projects = relationship("Project", back_populates="agency", cascade="all, delete-orphan")
     invitations = relationship("Invitation", back_populates="agency", cascade="all, delete-orphan")
+    notifications = relationship("Notification", back_populates="agency", cascade="all, delete-orphan")
+    intake_forms = relationship("ClientIntakeForm", back_populates="agency", cascade="all, delete-orphan")
 
 
 class Client(Base):
@@ -306,4 +308,80 @@ class Invitation(Base):
             sqlite_where=text("accepted_at IS NULL"),
             postgresql_where=text("accepted_at IS NULL")
         )
+    )
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    agency_id = Column(String(36), ForeignKey("agencies.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    event_type = Column(String(100), nullable=False)
+    title = Column(String(255), nullable=False)
+    message = Column(String(2000), nullable=False)
+    entity_type = Column(String(100), nullable=True)
+    entity_id = Column(String(36), nullable=True)
+    is_read = Column(Boolean, default=False, nullable=False)
+
+    created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime, nullable=False)
+
+    agency = relationship("Agency", back_populates="notifications")
+    recipient = relationship("User", foreign_keys=[user_id])
+
+    __table_args__ = (
+        Index("idx_notifications_agency_id", "agency_id"),
+        Index("idx_notifications_user_id", "user_id"),
+        Index("idx_notifications_read", "user_id", "is_read"),
+    )
+
+
+class ClientIntakeForm(Base):
+    __tablename__ = "client_intake_forms"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    agency_id = Column(String(36), ForeignKey("agencies.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String(255), nullable=False)
+    fields_schema = Column(Text, nullable=False)
+    share_token = Column(String(255), unique=True, nullable=False, index=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+
+    created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime, nullable=False)
+
+    agency = relationship("Agency", back_populates="intake_forms")
+    submissions = relationship("ClientIntakeSubmission", back_populates="form", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        Index("idx_intake_forms_agency_id", "agency_id"),
+    )
+
+
+class ClientIntakeSubmission(Base):
+    __tablename__ = "client_intake_submissions"
+
+    id = Column(String(36), primary_key=True, default=generate_uuid)
+    agency_id = Column(String(36), ForeignKey("agencies.id", ondelete="CASCADE"), nullable=False)
+    form_id = Column(String(36), ForeignKey("client_intake_forms.id", ondelete="CASCADE"), nullable=False)
+    client_id = Column(String(36), ForeignKey("clients.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+    client_name = Column(String(255), nullable=False)
+    project_name = Column(String(255), nullable=False)
+    answers_json = Column(Text, nullable=False)
+
+    created_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    updated_by = Column(String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, nullable=False)
+    updated_at = Column(DateTime, nullable=False)
+
+    form = relationship("ClientIntakeForm", back_populates="submissions")
+
+    __table_args__ = (
+        Index("idx_intake_submissions_agency_id", "agency_id"),
+        Index("idx_intake_submissions_form_id", "form_id"),
     )

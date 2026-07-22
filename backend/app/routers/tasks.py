@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from .. import models, schemas, auth
+from ..services.event_bus import emit_notification
 
 router = APIRouter(prefix="/tasks", tags=["Tasks"])
 
@@ -85,6 +86,18 @@ def create_task(
     db.add(task)
     db.commit()
     db.refresh(task)
+    emit_notification(
+        db,
+        agency_id=membership.agency_id,
+        event_type="task_created",
+        title="Task created",
+        message=f"{task.title} was created in {project.name}.",
+        entity_type="task",
+        entity_id=task.id,
+        client_visible=task.is_client_visible,
+        actor_user_id=membership.user_id,
+    )
+    db.commit()
     
     # Reload with relations
     return db.query(models.Task).filter(models.Task.id == task.id).first()
@@ -185,6 +198,18 @@ def update_task(
         
     db.commit()
     db.refresh(task)
+    emit_notification(
+        db,
+        agency_id=membership.agency_id,
+        event_type="task_updated",
+        title="Task updated",
+        message=f"{task.title} was updated.",
+        entity_type="task",
+        entity_id=task.id,
+        client_visible=task.is_client_visible,
+        actor_user_id=membership.user_id,
+    )
+    db.commit()
     return task
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)

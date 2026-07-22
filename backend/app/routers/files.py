@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from .. import models, schemas, auth
+from ..services.event_bus import emit_notification
 
 router = APIRouter(prefix="/files", tags=["Files"])
 
@@ -110,6 +111,18 @@ def upload_file(
     db.add(uploaded_file)
     db.commit()
     db.refresh(uploaded_file)
+    emit_notification(
+        db,
+        agency_id=membership.agency_id,
+        event_type="file_uploaded",
+        title="New file uploaded",
+        message=f"{uploaded_file.filename} was uploaded to {task.title}.",
+        entity_type="file",
+        entity_id=uploaded_file.id,
+        client_visible=uploaded_file.is_client_visible,
+        actor_user_id=membership.user_id,
+    )
+    db.commit()
     
     return db.query(models.UploadedFile).filter(models.UploadedFile.id == uploaded_file.id).first()
 
@@ -213,4 +226,16 @@ def update_file_approval(
     uploaded_file.approval_status = status_val
     db.commit()
     db.refresh(uploaded_file)
+    emit_notification(
+        db,
+        agency_id=membership.agency_id,
+        event_type="file_approval_updated",
+        title="File approval updated",
+        message=f"{uploaded_file.filename} is now marked {status_val}.",
+        entity_type="file",
+        entity_id=uploaded_file.id,
+        client_visible=uploaded_file.is_client_visible,
+        actor_user_id=membership.user_id,
+    )
+    db.commit()
     return uploaded_file
