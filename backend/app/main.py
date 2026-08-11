@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 
 from .database import engine, Base
 from .routers import auth, agencies, projects, tasks, time_entries, comments, files, invites, dashboard, notifications, intake_forms
@@ -13,10 +14,16 @@ app = FastAPI(
     version="1.0.0"
 )
 
+
+
+
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust for production as needed
+    allow_origins=[
+        "http://localhost:3000",
+        "https://agency-desk-iota.vercel.app",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
