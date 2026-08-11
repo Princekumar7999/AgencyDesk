@@ -17,19 +17,17 @@ app = FastAPI(
 
 
 
-# CORS configuration
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
-        "https://agency-desk-iota.vercel.app",
+        "https://agencydesk-3.onrender.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include Routers
 app.include_router(auth.router, prefix="/api")
 app.include_router(agencies.router, prefix="/api")
 app.include_router(projects.router, prefix="/api")
